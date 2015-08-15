@@ -1,15 +1,12 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 
 
 import os,re,fileinput
-
 import transmissionrpc
-
 import urllib
-
 import  fsdbm
 
-from BeautifulSoup import BeautifulSoup, SoupStrainer
+from bs4 import BeautifulSoup, SoupStrainer
 
 downloader = transmissionrpc.Client('127.0.0.1')
 
@@ -38,7 +35,7 @@ def add_dl(url,name):
         if (down_db[url.encode('utf-8')] == 1 ):
             print( "Already in db")
             return
-    except Exception, err:
+    except:
         print("Adding to db")
         down_db[url.encode('utf-8')] = 1;
 
@@ -51,7 +48,7 @@ def add_dl(url,name):
         try:
             print( url)
             downloader.add_uri(url,download_dir = dir)
-        except Exception, err:
+        except:
             print( "Bad torrent !  \n")
     else:
         print("[debug] name=" + name + " url=" + url )
@@ -80,7 +77,7 @@ def parse_site(terms):
         #get page number/ page count
         try: 
             stringa = soup.body.div.findAll('p')[1].findAll('a')[0].get('href')
-        except Exception,err:
+        except:
             print( '(no next href)End! \n')
             break
 
@@ -88,7 +85,7 @@ def parse_site(terms):
         if page_number == 1: basepagenumber = 1
         try:
             nextlink =  soup.body.div.findAll('p')[1].findAll('a')[page_number-basepagenumber].get('href')
-        except  Exception,err:
+        except :
             print( 'End! \n')
             break
         nextlink =  'http://www.tokyotosho.info/search.php' + nextlink 
