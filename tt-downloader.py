@@ -1,24 +1,38 @@
 #!/usr/bin/python3
-
+#Tokyotoshokan autodownloader script
 
 import os,re,fileinput
 import transmissionrpc
 import urllib
-import  fsdbm
+import argparse
+import signal
 
 from bs4 import BeautifulSoup, SoupStrainer
 
+from peewee import *
+
+db = SqliteDatabase('dlList.db')
+
+class DLFile(Model):
+    name = CharField()
+    url = CharField()
+
+    class Meta:
+        database = db 
+db.connect()
+
+DLFile.create_table(True)
+
 downloader = transmissionrpc.Client('127.0.0.1')
 
-down_db =  fsdbm.FSDBM("feed-dl.db")
+
 
 debug = 0
-
+verbosity = 0;
 
 def add_dl(url,name):
-    global downloader;
-    global debug
-    global down_db
+
+    print("New file for DL "+ name , "," + url)
     #try decode name
     #get name
     filename = name
@@ -30,26 +44,22 @@ def add_dl(url,name):
     while name.startswith(' '):
         name = name[1:len(name)]
     print(name)
-    #find collisions
-    try:
-        if (down_db[url.encode('utf-8')] == 1 ):
-            print( "Already in db")
-            return
-    except:
-        print("Adding to db")
-        down_db[url.encode('utf-8')] = 1;
+
+    fileRecord = DLFile(name = name, url = url.encode('utf-8'))
+    fileRecord.save()
+
 
     if  not debug:
-        dir = downloader.session_stats().fields['download_dir']+name+'/'
+        dir = downloader.session_stats().download_dir+'/'+name+'/'
         print(dir)
         d = os.path.dirname(dir)
         if not os.path.exists(d):
             os.makedirs(d)
-        try:
-            print( url)
-            downloader.add_uri(url,download_dir = dir)
-        except:
-            print( "Bad torrent !  \n")
+        #try:
+        #    print( url)
+        downloader.add_uri(url,download_dir = dir)
+        #except:
+        #    print( "Bad torrent !  \n")
     else:
         print("[debug] name=" + name + " url=" + url )
     
@@ -59,19 +69,19 @@ def parse_site(terms):
     #first pass
     going_on = True
     page_number = 1;
-    soup = BeautifulSoup(urllib.urlopen('http://www.tokyotosho.info/search.php?terms='+urllib.quote_plus(terms)).read())
+    soup = BeautifulSoup(urllib.request.urlopen('http://www.tokyotosho.info/search.php?terms='+urllib.request.quote(terms)).read(),"lxml")
     while going_on:
         baselist = soup.body.div.findAll('table')[2].tr.nextSibling
-        
-        while not not baselist:
-            reflist = baselist.findAll('td')[1].a
-            if (reflist):
-                if reflist.get('type') == 'application/x-bittorrent':
-                #print reflist.text
-                    print (reflist.text)
-                    add_dl(reflist.get('href'),reflist.text)
-                    baselist  = baselist.nextSibling.nextSibling
-        
+        #print(baselist)
+        for b in baselist:
+            print(b)
+            allRefs = b.findAll('a')
+            if len(allRefs) > 1:
+                reflist = b.findAll('a')[1]
+                if (reflist):
+                    if reflist.get('type') == 'application/x-bittorrent':
+                        add_dl(reflist.get('href'),reflist.text)
+                    
     #go next pages
 
         #get page number/ page count
@@ -91,14 +101,14 @@ def parse_site(terms):
         nextlink =  'http://www.tokyotosho.info/search.php' + nextlink 
         print( 'Going next page url= '+nextlink + '\n')
         page_number  = page_number + 1 
-        soup = BeautifulSoup(urllib.urlopen(nextlink).read())
+        soup = BeautifulSoup(urllib.request.urlopen(nextlink).read(),"lxml")
     
         
     
 
 
-def dofile():
-    for line in fileinput.input("file-dl.txt"):
+def dofile(seriesListFileName):
+    for line in fileinput.input(seriesListFileName):
         print("parsing line="+ line)
         parse_site(line.rstrip('\n'))
     fileinput.close()
@@ -114,15 +124,17 @@ def timeout_handler(signum, frame):
 
 
 
-import signal
+
 
 signal.signal(signal.SIGALRM, timeout_handler) 
 signal.alarm(600) # triger alarm in 5 minuts
 
-try:
-    dofile()
-except:
-    print("Time out parsing");
+argumentsParser = argparse.ArgumentParser()
+argumentsParser.add_argument('f', type = str, help = "provide a series name for search and load")
+argumentsParser.add_argument('-v', "--verbosity" , action = "count" , default = 0 ,help = "set verbosity level")
+arguments = argumentsParser.parse_args()
+verbosity  = arguments.verbosity
+parse_site(arguments.f)
 
 
 
